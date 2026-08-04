@@ -24,7 +24,7 @@ strong{font-weight:600}
 <blockquote>
 <p><strong>One line:</strong> physics-informed reinforcement-learning post-training for trajectory generation that treats hard physical constraints as a <strong>reward floor</strong>, so a policy optimized with PPO, DPO, or GRPO improves task quality without learning to produce physically impossible trajectories.</p>
 </blockquote>
-<p><strong>Honest status up front.</strong> Pi-GRPO is a <strong>workshop paper</strong> ("Physics as a Hard Reward Floor", MOSS @ COLM 2026) plus a runnable RL stack. The training code (PPO, DPO, and GRPO under a hybrid physics-aware reward) is <strong>real and runs</strong>. The headline result, hard-constraint violation rate driven from about <strong>18% under vanilla DPO to about 0% with physics-augmented DPO</strong>, with KL bounded across the PPO run, is the <strong>paper's reported experimental result</strong> at workshop scale, not a large-scale production benchmark. In short: the method and the RL stack are mine and runnable; the numbers are the paper's reported results, which I would scale and re-report on a larger benchmark before treating them as final.</p>
+<p><strong>Honest status up front.</strong> Pi-GRPO is a <strong>workshop paper</strong> ("Physics as a Hard Reward Floor", MOSS @ COLM 2026) plus a runnable RL stack. The GRPO training loop and the hybrid physics-aware reward are <strong>real and run</strong>. PPO and DPO are implemented but were <strong>never trained</strong> for the workshop paper, so no DPO result exists and none should be attributed to it. The paper's only training result is a short GRPO run on a 0.5B policy, and that comparison is <strong>currently under revision</strong>: its two arms were not run at a matched step budget, so the quantitative claim is being re-run before it is cited anywhere. In short, the method and the RL stack are mine and runnable, and the headline number is withdrawn pending that rerun.</p>
 <hr />
 <h2 id="1-what-it-is-and-the-gap-it-fills">1. What it is and the gap it fills</h2>
 <p>Reinforcement-learning post-training (the RLHF family: PPO, DPO, GRPO) optimizes a policy against a <strong>learned or preference reward</strong>. The well-known failure mode is <strong>reward hacking</strong>: the policy finds outputs that score well under the reward but are wrong in a way the reward does not capture. For trajectory generation that means physically impossible motion, speeds, accelerations, or turns no real vehicle or vessel could execute, that nonetheless please the reward.</p>
@@ -46,7 +46,7 @@ strong{font-weight:600}
 <h2 id="3-the-optimizers-briefly">3. The optimizers, briefly</h2>
 <ul>
 <li><strong>PPO</strong> (Proximal Policy Optimization): a clipped policy-gradient objective with a KL leash to the reference policy, the workhorse of RLHF. Pi-GRPO keeps KL bounded across the run.</li>
-<li><strong>DPO</strong> (Direct Preference Optimization): trains directly on preference pairs without a separate reward model. Vanilla DPO is where the physics-violation problem is most visible; the physics-augmented variant is what drives violations toward zero.</li>
+<li><strong>DPO</strong> (Direct Preference Optimization): trains directly on preference pairs without a separate reward model. The physics-augmented variant folds the violation difference into the pairwise logit, so a positive gamma can flip a pair when the preferred completion is the less physical one. This variant is implemented but was never trained, so no DPO violation-rate result exists.</li>
 <li><strong>GRPO</strong> (Group Relative Policy Optimization): estimates advantage from the <strong>relative</strong> scores of a group of samples for the same prompt, dropping the value network. It pairs naturally with the physics floor because the floor reorders the group toward admissible samples.</li>
 </ul>
 <hr />
@@ -71,8 +71,12 @@ strong{font-weight:600}
 <td><strong>Real</strong></td>
 </tr>
 <tr>
-<td>Reported result: ~18% -&gt; ~0% hard-constraint violations (physics-augmented DPO), KL bounded</td>
-<td><strong>Paper's reported result</strong> (workshop scale), not re-reproduced here</td>
+<td>Quantitative violation-rate reduction</td>
+<td><strong>Under revision.</strong> The paper's two GRPO arms were not trained at a matched step budget, so the number is withdrawn pending a matched rerun</td>
+</tr>
+<tr>
+<td>DPO / PPO training results</td>
+<td><strong>None exist.</strong> Both are implemented, neither was trained</td>
 </tr>
 <tr>
 <td>Large-scale benchmark vs standard RLHF baselines</td>
