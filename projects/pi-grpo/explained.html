@@ -24,11 +24,11 @@ strong{font-weight:600}
 <blockquote>
 <p><strong>One line:</strong> physics-informed reinforcement-learning post-training for trajectory generation that treats hard physical constraints as a <strong>reward floor</strong>, so a policy optimized with PPO, DPO, or GRPO improves task quality without learning to produce physically impossible trajectories.</p>
 </blockquote>
-<p><strong>Honest status up front.</strong> Pi-GRPO is a <strong>workshop paper</strong> ("Physics as a Hard Reward Floor", MOSS @ COLM 2026) plus a runnable RL stack. The GRPO training loop and the hybrid physics-aware reward are <strong>real and run</strong>. PPO and DPO are implemented but were <strong>never trained</strong> for the workshop paper, so no DPO result exists and none should be attributed to it. The paper's only training result is a short GRPO run on a 0.5B policy, and that comparison is <strong>currently under revision</strong>: its two arms were not run at a matched step budget, so the quantitative claim is being re-run before it is cited anywhere. In short, the method and the RL stack are mine and runnable, and the headline number is withdrawn pending that rerun.</p>
+<p><strong>Honest status up front.</strong> Pi-GRPO is a runnable RL stack whose reward design was submitted as a workshop paper ("Physics as a Hard Reward Floor", MOSS @ COLM 2026) and <strong>rejected</strong>. The reviewer's core objection, that the paper's reward-hacking probe was a synthetic construction rather than a test of a trained model, was correct, and my own follow-up audit confirmed it point by point. That audit also found something more interesting than the number the paper led with: a real failure mode in how GRPO's own training dynamics interact with a hard constraint penalty, verified with a reproducible script. The GRPO training loop and the hybrid physics-aware reward are real and run. PPO and DPO are implemented but were never trained, so no result exists for either.</p>
 <hr />
 <h2 id="1-what-it-is-and-the-gap-it-fills">1. What it is and the gap it fills</h2>
 <p>Reinforcement-learning post-training (the RLHF family: PPO, DPO, GRPO) optimizes a policy against a <strong>learned or preference reward</strong>. The well-known failure mode is <strong>reward hacking</strong>: the policy finds outputs that score well under the reward but are wrong in a way the reward does not capture. For trajectory generation that means physically impossible motion, speeds, accelerations, or turns no real vehicle or vessel could execute, that nonetheless please the reward.</p>
-<p>Pi-GRPO's idea: make the physics a <strong>hard floor</strong>, not a soft afterthought. The reward is a hybrid of the task reward and a physics term that heavily penalizes violations of kinematic constraints, so an output that breaks physics can never be high-reward no matter how well it games the task objective. The result is RL that improves the policy while keeping every sample physically admissible.</p>
+<p>Pi-GRPO's idea: make the physics a <strong>hard floor</strong>, not a soft afterthought. The reward is a hybrid of the task reward and a physics term that heavily penalizes violations of kinematic constraints, so an output that breaks physics can never be high-reward no matter how well it games the task objective. The same reward is shared unchanged across PPO, DPO, and GRPO by construction, so the contribution is the reward shaping, not a single algorithm.</p>
 <hr />
 <h2 id="2-how-it-works">2. How it works</h2>
 <pre><code> policy (trajectory generator)
@@ -41,17 +41,19 @@ strong{font-weight:600}
  policy update  (PPO clipped objective | DPO preference | GRPO group-relative advantage)
         │
         └────────────── improvement loop ──────────────┘</code></pre>
-<p>The same physics-floor reward plugs into three optimizers, so the contribution is the <strong>reward shaping</strong>, not a single algorithm.</p>
 <hr />
 <h2 id="3-the-optimizers-briefly">3. The optimizers, briefly</h2>
 <ul>
-<li><strong>PPO</strong> (Proximal Policy Optimization): a clipped policy-gradient objective with a KL leash to the reference policy, the workhorse of RLHF. Pi-GRPO keeps KL bounded across the run.</li>
-<li><strong>DPO</strong> (Direct Preference Optimization): trains directly on preference pairs without a separate reward model. The physics-augmented variant folds the violation difference into the pairwise logit, so a positive gamma can flip a pair when the preferred completion is the less physical one. This variant is implemented but was never trained, so no DPO violation-rate result exists.</li>
-<li><strong>GRPO</strong> (Group Relative Policy Optimization): estimates advantage from the <strong>relative</strong> scores of a group of samples for the same prompt, dropping the value network. It pairs naturally with the physics floor because the floor reorders the group toward admissible samples.</li>
+<li><strong>PPO</strong> (Proximal Policy Optimization): a clipped policy-gradient objective with a KL leash to the reference policy, the workhorse of RLHF. Implemented, never trained for this work.</li>
+<li><strong>DPO</strong> (Direct Preference Optimization): trains directly on preference pairs without a separate reward model. The physics-augmented variant folds the violation difference into the pairwise logit, so a positive gamma can flip a pair when the preferred completion is the less physical one. Implemented, never trained.</li>
+<li><strong>GRPO</strong> (Group Relative Policy Optimization): estimates advantage from the <strong>relative</strong> scores of a group of samples for the same prompt, dropping the value network. This is the only trainer actually run, and it is also where the real finding below lives.</li>
 </ul>
 <hr />
-<h2 id="4-the-core-idea-from-scratch">4. The core idea, from scratch</h2>
-<p>A reward <code>r = r_task + lambda * r_physics</code>, where <code>r_physics</code> is a large negative penalty whenever a trajectory violates a kinematic bound (and zero when it is admissible), behaves like a <strong>floor</strong>: any policy improvement that increases <code>r_task</code> by hacking physics is cancelled by <code>r_physics</code>, so the optimizer is pushed into the physically feasible region first and then improves task quality within it. This is the RL analogue of the deterministic feasibility gates used elsewhere in the portfolio (the space-time-prism validator in GeoTrace-Agent, the kinematic prior in Pi-DPM): encode the physics as a hard constraint rather than hoping the model learns it.</p>
+<h2 id="4-the-core-idea-and-where-it-breaks">4. The core idea, and where it breaks</h2>
+<p>A reward <code>r = r_task + lambda * r_physics</code>, where <code>r_physics</code> is a large negative penalty whenever a trajectory violates a kinematic bound, is meant to behave like a <strong>floor</strong>: any policy improvement that increases <code>r_task</code> by hacking physics should be cancelled by <code>r_physics</code>, so the optimizer is pushed into the feasible region first. That is the design intent, and it is true for the reward function in isolation.</p>
+<p>It is not true once GRPO's own training mechanics are in the loop. GRPO does not train on the raw reward. It z-scores each completion against the mean and standard deviation of its own sampling group before computing a gradient. That normalization step is where the floor leaks.</p>
+<p><strong>The finding, verified with a reproducible script (<code>run_groupnorm.py</code>).</strong> Take a group of four sampled completions with speeds 20, 25, 60, and 200 against a 30-knot envelope, under the reward described above. The completion at 60 knots violates the envelope. Under raw reward it scores far worse than the two feasible completions, as intended. Under GRPO's group-normalized advantage, it receives <strong>positive</strong> advantage, <code>+0.247</code>, because it merely beats the group's worst member (200 knots) rather than being compared against the envelope itself. The optimizer reinforces it. Sampling 200,000 random four-member groups that contain at least one violator, <strong>85.6% of them reinforce a violator this way</strong>, and the effect does not go away by raising the penalty: multiplying it by a million changes that advantage by under 0.001, because the group's own standard deviation absorbs the increase. A hard, unbounded penalty is exactly as leaky as a small one once it passes through group normalization.</p>
+<p>This is the honest version of the paper's headline claim. The physics floor is real at the level of the reward function. Whether it holds during actual GRPO training depends on what else is in the sampling group, and for many groups it does not hold at all.</p>
 <hr />
 <h2 id="5-whats-real-vs-scaffold">5. What's real vs scaffold</h2>
 <table>
@@ -71,8 +73,12 @@ strong{font-weight:600}
 <td><strong>Real</strong></td>
 </tr>
 <tr>
-<td>Quantitative violation-rate reduction</td>
-<td><strong>Under revision.</strong> The paper's two GRPO arms were not trained at a matched step budget, so the number is withdrawn pending a matched rerun</td>
+<td>GRPO group-normalization failure mode</td>
+<td><strong>Real, measured, reproducible</strong> (<code>run_groupnorm.py</code>)</td>
+</tr>
+<tr>
+<td>A clean, matched-budget violation-rate comparison</td>
+<td><strong>Not done.</strong> The workshop paper's own comparison was confounded (its two arms ran different step counts on different devices) and was withdrawn rather than reported</td>
 </tr>
 <tr>
 <td>DPO / PPO training results</td>
@@ -86,9 +92,10 @@ strong{font-weight:600}
 </table>
 <hr />
 <h2 id="6-what-id-do-next">6. What I'd do next</h2>
+<p>The real open question this work turned up: when does GRPO's group normalization act as a helpful adaptive gradient, and when does it actively invert a safety constraint? Both are true depending on the reward's shape and the group's composition, and no existing analysis draws the line between them. That is a sharper, more useful research question than the one the workshop paper originally asked, and it is where the next version of this work is headed:</p>
 <ol type="1">
-<li>Scale beyond the workshop setting and re-report the violation rate and task quality against standard PPO/DPO/GRPO baselines as a reproducible benchmark.</li>
-<li>Sweep the physics-floor weight <code>lambda</code> to show the task-quality vs feasibility trade-off explicitly.</li>
-<li>Connect the floor to the same kinematic models used in the diffusion line (Pi-DPM) so the physics constraint is shared across the generative and RL stacks.</li>
+<li>Characterize the regime boundary between "normalization helps convergence" and "normalization defeats the constraint," as a function of penalty magnitude, group size, and the fraction of a group that violates.</li>
+<li>Rerun the GRPO comparison at a matched step budget on one device, with seeds and reported intervals, since the original comparison was withdrawn for confound rather than replaced.</li>
+<li>Test whether a bounded or clipped penalty is actually safer under group normalization than an unbounded one, since the finding above suggests boundedness may not be the variable that matters.</li>
 </ol>
 <div class="foot">Plain-language explainer for Pi-GRPO, grounded in the real code and honest about scope. <a href="./">Full paper page</a> &middot; <a href="../../index.html">Portfolio</a></div></div></body></html>

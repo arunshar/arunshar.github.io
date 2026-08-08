@@ -96,15 +96,16 @@ P = {
  "pi-grpo": dict(
   title="Pi-GRPO", kept="Physics-Informed RL Post-Training",
   sub="Physics-informed reinforcement-learning post-training for trajectory generation that treats hard physical constraints as a reward floor, so a policy optimized with PPO, DPO, or GRPO improves task quality without learning to produce physically impossible trajectories.",
-  pills=["PPO / DPO / GRPO","Physics reward floor","Workshop paper (MOSS @ COLM 2026)"],
-  abstract="RL post-training (PPO, DPO, GRPO) can reward-hack into physically impossible outputs. Pi-GRPO makes the physics a hard reward floor: the reward is a hybrid of the task reward and a term that heavily penalizes kinematic-constraint violations, so the optimizer is pushed into the feasible region first and then improves task quality within it. The same floor plugs into all three optimizers.",
-  scope="The GRPO training loop and the hybrid physics reward are <b>real and run</b>. PPO and DPO are implemented but were <b>never trained</b> for the workshop paper, so no DPO result exists and none should be attributed to it. The workshop paper's only training result is a short GRPO run on a 0.5B policy, and that comparison is <b>currently under revision</b>, because its two arms were not run at a matched step budget. No violation-rate figure is quoted on this page until the matched rerun lands.",
+  pills=["PPO / DPO / GRPO","Physics reward floor","GRPO normalization finding"],
+  abstract="RL post-training (PPO, DPO, GRPO) can reward-hack into physically impossible outputs. Pi-GRPO makes the physics a hard reward floor: the reward is a hybrid of the task reward and a term that heavily penalizes kinematic-constraint violations, shared unchanged across all three optimizers by construction. A workshop paper built on this reward was submitted and rejected; the follow-up audit found that GRPO's own group-relative advantage normalization can silently defeat the floor.",
+  scope="The GRPO training loop and the hybrid physics reward are <b>real and run</b>. PPO and DPO are implemented but were <b>never trained</b>, so no result exists for either. The workshop paper's reward-hacking probe was reviewed and rejected as a synthetic construction rather than a trained-model test, and the reviewer was right. The follow-up audit found something more useful: GRPO z-scores each sampled completion against its own group before computing a gradient, so a constraint-violating completion can receive a <b>positive</b> training signal whenever it merely beats its sampled peers, independent of penalty size. Verified with a reproducible script (85.6% of random violator-containing groups reinforce a violator).",
   rows=[("GRPO loop + physics reward","ok","Real, runnable"),
         ("Physics-floor reward (kinematic penalty)","ok","Real"),
-        ("Violation-rate reduction (quantitative)","scaf","Under revision; arms not run at matched budget"),
+        ("GRPO group-normalization failure mode","ok","Real, measured, reproducible (run_groupnorm.py)"),
+        ("Matched-budget violation-rate comparison","scaf","Not done; the paper's own comparison was confounded and withdrawn"),
         ("DPO / PPO training results","scaf","Implemented, never trained; no result exists"),
         ("Large-scale benchmark vs RLHF baselines","scaf","Next step, not done")],
-  evidence="The GRPO loop and the physics-floor reward are runnable. The workshop paper's violation-rate comparison is under revision, because its two arms were not trained at a matched step budget, so no violation-rate figure is quoted here. Any \"18% to 0%\" number previously shown on this page was not in the workshop paper and has been removed. See the explainer and paper.")
+  evidence="The GRPO loop and the physics-floor reward are runnable. The workshop submission was rejected on a valid objection (the probe was synthetic, not a trained-model test), and the follow-up audit turned up a real, verified finding instead: GRPO's own group normalization can hand a constraint-violating completion a positive advantage regardless of penalty magnitude. That result, not a violation-rate percentage, is the current headline. See the explainer and paper.")
 }
 
 HF = "https://huggingface.co/spaces/Arun0808/{s}"

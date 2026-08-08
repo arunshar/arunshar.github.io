@@ -227,15 +227,15 @@ body += f'<line x1="{fcenters[0]}" y1="{busy}" x2="{fcenters[-1]}" y2="{busy}" s
 body += box(W / 2 - 150, 188, 300, 56, "Hybrid reward", [], "acc")
 body += varrow(W / 2, busy, 188)
 b2, c2, bw2, y2, h2 = spine([
-    ("Preference triples", ["~11K from GeoTrace HITL"], "box"),
-    ("PPO / DPO / GRPO", ["post-training"], "acc"),
-    ("vLLM rollouts", ["content-addressed ckpts"], "box"),
+    ("Sampled group", ["K rollouts per prompt"], "box"),
+    ("GRPO (run)", ["group-normalized advantage"], "acc"),
+    ("PPO / DPO", ["implemented, not trained"], "box"),
     ("Physics-feasible policy", ["trajectory generation"], "grn"),
 ], y=276, h=84)
 body += b2
-body += band(384, "Quantitative result under revision", [
-    "The workshop paper's two GRPO arms were not trained at a matched step budget, so the violation-rate",
-    "comparison is being re-run. No figure is quoted here until it completes.",
+body += band(384, "GRPO group normalization can defeat the floor", [
+    "A constraint-violating completion can get positive advantage just by beating its sampled peers,",
+    "regardless of penalty size: 85.6% of random violator-containing groups reinforce a violator.",
 ])
 body += legend(492)
 figs["pi-grpo"] = wrap(510, body, "Pi-GRPO architecture")
